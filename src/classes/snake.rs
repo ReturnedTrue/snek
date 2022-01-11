@@ -1,6 +1,5 @@
 use ggez::{Context, GameResult};
 use ggez::graphics::{self, Rect, Mesh, DrawMode, DrawParam, Color};
-use ggez::timer;
 
 use std::collections::vec_deque::VecDeque;
 
@@ -15,7 +14,6 @@ pub enum Direction {
 }
 
 pub enum MoveSnakeResult {
-	DidNotMove,
 	Moved,
 	GameOver,
 }
@@ -26,31 +24,19 @@ pub struct Snake {
 	pub just_ate: bool,
 
 	width: f32,
-	update_after_delta: f32,
-	accumulated_delta: f32,
 }
 
 impl Snake {
-	pub fn new(first_part: GamePos, width: f32, updates_per_second: f32) -> Snake {
+	pub fn new(first_part: GamePos, width: f32) -> Snake {
 		return Snake {
 			parts: VecDeque::from([first_part]),
 			width: width,
 			direction: Direction::Right,
-			just_ate: false,
-
-			update_after_delta: 1f32 / updates_per_second,
-			accumulated_delta: -1f32,
+			just_ate: false
 		}
 	}
 
-	pub fn move_snake(&mut self, ctx: &mut Context, col_and_row: (f32, f32)) -> MoveSnakeResult {
-		if (self.accumulated_delta != -1f32 && self.accumulated_delta < self.update_after_delta) {
-			self.accumulated_delta += timer::delta(ctx).as_secs_f32();
-			return MoveSnakeResult::DidNotMove;
-		} else {
-			self.accumulated_delta = 0f32;
-		}
-
+	pub fn move_snake(&mut self, col_and_row: (f32, f32)) -> MoveSnakeResult {
 		let mut new_front = self.parts
 			.get(0)
 			.expect("No front part of snake found")
@@ -66,7 +52,6 @@ impl Snake {
 		if (!self.just_ate) {
 			self.parts.pop_back();
 		} else {
-			// println!("Did just eat");
 			self.just_ate = false;
 		}
 		

@@ -7,6 +7,7 @@ use ggez::{Context, GameResult};
 use rand::{self, Rng};
 
 use super::food::Food;
+use super::r#yield::Yield;
 use super::snake::{Direction, MoveSnakeResult, Snake};
 use crate::services::highscore::{HighscoreService};
 
@@ -35,7 +36,7 @@ pub struct Game {
 	score: u32,
 
 	state: GameState,
-	accumulated_game_over: Option<f32>,
+	game_over_yield: Yield,
 
 	font: Font,
 	cached_window_size: GamePos,
@@ -45,7 +46,7 @@ pub struct Game {
 	columns: f32,
 	rows: f32,
 	item_width: f32,
-	updates_per_second: f32,
+	updates_per_second: u32,
 }
 
 impl Game {
@@ -53,7 +54,7 @@ impl Game {
 		ctx: &mut Context,
 		col_and_row: (f32, f32),
 		item_width: f32,
-		updates_per_second: f32,
+		updates_per_second: u32,
 	) -> Game {
 		let inner_size = graphics::window(ctx).inner_size();
 
@@ -61,14 +62,13 @@ impl Game {
 			snake: Snake::new(
 				GamePos(col_and_row.0 / 2f32, col_and_row.1 / 2f32),
 				item_width,
-				updates_per_second,
 			),
 
 			food: Vec::new(),
 			score: 0,
 
 			state: GameState::ToBegin,
-			accumulated_game_over: None,
+			game_over_yield: Yield::new(3f32),
 
 			font: Font::new(ctx, "/fonts/Android101.ttf").expect("Failed to load font"),
 			cached_window_size: GamePos(inner_size.width as f32, inner_size.height as f32),
@@ -94,7 +94,6 @@ impl Game {
 		self.snake = Snake::new(
 			GamePos(self.columns / 2f32, self.rows / 2f32),
 			self.item_width,
-			self.updates_per_second,
 		);
 
 		self.food.clear();
@@ -131,7 +130,9 @@ impl Game {
 				.any(|food| food.would_collide(new_x, new_y));
 
 			if (!collides_with_food && !self.snake.would_collide(new_x, new_y)) {
-				self.food.push(Food::new(new_x.floor(), new_y.floor(), self.item_width));
+				let new_food = Food::new(new_x.floor(), new_y.floor(), self.item_width);
+				self.food.push(new_food);
+
 				break;
 			}
 		}
@@ -140,33 +141,27 @@ impl Game {
 
 impl EventHandler for Game {
 	fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-		match self.state {
-			GameState::ToBegin => return Ok(()),
-			GameState::GameOver => {
-				let new_value = self.accumulated_game_over
-					.unwrap_or(0f32) + timer::delta(ctx).as_secs_f32();
-
-				if (new_value > 3f32) {
-					self.accumulated_game_over = None;
+		while (timer::check_update_time(ctx, self.updates_per_second)) {
+	
+			if (self.state == GameState::ToBegin) {
+				return Ok(());
+			} else if (self.state == GameState::GameOver) {
+				if (self.game_over_yield.completed_yield(ctx)) {
 					self.state = GameState::ToBegin;
 
 					self.highscorer.register_score(self.score).unwrap();
 					self.score = 0;
-				} else {
-					self.accumulated_game_over = Some(new_value);
 				}
 
-				return Ok(());
+				return Ok(());				
 			}
-			_ => {}
-		};
 
-		let move_result = self.snake.move_snake(ctx, (self.columns, self.rows));
+			let move_result = self.snake.move_snake((self.columns, self.rows));
 
-		match move_result {
-			MoveSnakeResult::GameOver => self.reset_game(),
-			MoveSnakeResult::Moved => self.look_for_food_eaten(),
-			MoveSnakeResult::DidNotMove => {}
+			match move_result {
+				MoveSnakeResult::GameOver => self.reset_game(),
+				MoveSnakeResult::Moved => self.look_for_food_eaten(),
+			}			
 		}
 
 		return Ok(());
